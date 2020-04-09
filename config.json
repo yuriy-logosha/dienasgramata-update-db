@@ -1,0 +1,12 @@
+{
+  "sites": [
+    "http://darit.space/dienasgramata/dienasgramata.html"
+  ],
+  "logging.name": "dienasgramata-to-db",
+  "logging.format": "%(asctime)-15s %(levelname)s %(message)s",
+  "logging.file": "dienasgramata-to-db.log",
+  "logging.level": 10,
+  "db.url": "mongodb://192.168.1.61:27017/",
+  "export.file.path": "dienasgramata.json",
+  "restart": 900
+}
