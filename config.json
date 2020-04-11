@@ -7,6 +7,8 @@
   "logging.file": "dienasgramata-update-db.log",
   "logging.level": 10,
   "db.url": "mongodb://192.168.1.61:27017/",
-  "export.file.path": "dienasgramata.json",
-  "restart": 900
+  "kafka.topic": "notifications",
+  "kafka.host": "192.168.1.63:9092",
+  "kafka.message.tag": "updated",
+  "restart": 6
 }

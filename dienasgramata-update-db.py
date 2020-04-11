@@ -2,12 +2,12 @@
 import logging
 import urllib.parse
 import time
+import json
 import datetime
-
 import pymongo
 from bson.objectid import ObjectId
-
-from utils import json_from_file, MyHTMLParser, _get, json_to_file
+from kafka import KafkaProducer
+from utils import json_from_file, MyHTMLParser, _get
 
 config_file_name = 'config.json'
 config = {}
@@ -17,6 +17,14 @@ try:
 except RuntimeError as e:
     print(e)
     exit()
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        if isinstance(o, datetime):
+            return o.strftime("%d.%m.%Y")
+        return json.JSONEncoder.default(self, o)
 
 formatter = logging.Formatter(config['logging.format'])
 # Create handlers
@@ -36,6 +44,7 @@ logging.basicConfig(format=config["logging.format"], handlers=[c_handler, f_hand
 logger = logging.getLogger(config["logging.name"])
 logger.setLevel(logging_level)
 
+producer = KafkaProducer(bootstrap_servers=[config['kafka.host']], value_serializer = lambda x: json.dumps(x, cls = JSONEncoder).encode('utf-8'))
 
 def request_site():
     d = []
@@ -110,25 +119,19 @@ def extract(s):
 
 
 def process_home_task(s, buffer):
-    if s[0] == 'a' and not s[1][0][1].startswith('http'):
-        try:
+    try:
+        if s[0] == 'a' and not s[1][0][1].startswith('http'):
             if buffer:
                 buffer += ';'
             buffer += 'http://darit.space/dienasgramata/' + urllib.parse.quote(s[1][0][1].replace('\r', '').replace('\n', '').strip())
-        except RuntimeError as e:
-            logger.error(e)
-    else:
-        try:
-            txt = s[2].replace('\r', '').replace('\n', '').strip()
-            if txt:
-                if buffer:
-                    buffer += ';'
-                buffer += txt
-        except RuntimeError as e:
-            logger.error(e)
+        else:
+            txt = s[2].replace('\r', '').replace('\n', '').strip() if len(s) > 2 else ""
+            if buffer:
+                buffer += ';'
+            buffer += txt
+    except RuntimeError as e:
+        logger.error(e)
     return buffer
-
-# encode('utf-8').decode().
 
 
 _date = ""
@@ -161,6 +164,10 @@ def is_need_update(_record, _date, _day, _subj, _tema, _hometask):
         return True
     return False
 
+
+def notify(items):
+    if producer:
+        producer.send(config['kafka.topic'], value = {config["kafka.message.tag"]: items})
 
 while True:
     try:
@@ -226,15 +233,21 @@ while True:
             for i in db_records:
                 print(i)
             if db_records:
+                n_arr = []
                 for rec in db_records:
                     result = dienasgramata.update_one(rec[0], rec[1])
                     if not result.modified_count == 1:
                         print(result, rec)
-            # json_to_file(config['export.file.path'], db_records)
+                    else:
+                        n_arr.append(rec[0]['_id'])
+                notify(n_arr)
 
 
     except RuntimeError as e:
         logger.error(e)
+
+    _right_section = False
+    db_records = []
 
     if 'restart' in config and config['restart'] > 0:
         logger.info("Waiting %s seconds.", config['restart'])
