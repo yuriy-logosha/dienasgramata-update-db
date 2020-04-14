@@ -57,7 +57,7 @@ def request_site():
     return d
 
 
-def build_update_db_record(r, _date, _day, _subj, _tema, _hometask):
+def build_update_db_record(r, _tema, _hometask):
     try:
         a = ({"_id": ObjectId(r["_id"])}, {"$set": {"tema": _tema, "exercise": _hometask}})
         return a
@@ -96,6 +96,12 @@ def is_after_hometask(d, after_hometask):
     return False
 
 
+def is_first_column(d):
+    if d[0] == 'td' and d[1] == [('class', 'first-column')]:
+        return True
+    return False
+
+
 def is_score(d):
     if d[0] == 'td' and d[1] == [('class', 'score')]:
         return True
@@ -126,7 +132,7 @@ def process_home_task(s, buffer):
             buffer += 'http://darit.space/dienasgramata/' + urllib.parse.quote(s[1][0][1].replace('\r', '').replace('\n', '').strip())
         else:
             txt = s[2].replace('\r', '').replace('\n', '').strip() if len(s) > 2 else ""
-            if buffer:
+            if txt and buffer:
                 buffer += ';'
             buffer += txt
     except RuntimeError as e:
@@ -146,7 +152,7 @@ _right_section = False
 db_records = []
 
 
-def get_record(_date, _day, _subj):
+def get_db_record(_date, _day, _subj):
     _records = list(dienasgramata.find({"kind": "exercise", "date": _date , "day": f"{_day}", "subject": f"{_subj}"}))
     if len(_records) > 0:
         return _records[0]
@@ -159,7 +165,7 @@ def prepare_date(_d):
     return datetime.datetime(int(_date_left[2])+2000, int(_date_left[1]), int(_date_left[0])), _date_right
 
 
-def is_need_update(_record, _date, _day, _subj, _tema, _hometask):
+def is_need_update(_record, _tema, _hometask):
     if ('exercise' in _record and _record['exercise'] != _hometask) or ('tema' in _record and _record['tema'] != _tema):
         return True
     return False
@@ -168,6 +174,31 @@ def is_need_update(_record, _date, _day, _subj, _tema, _hometask):
 def notify(items):
     if producer:
         producer.send(config['kafka.topic'], value = {config["kafka.message.tag"]: items})
+
+
+def get_record(db_records, param):
+    for r in db_records:
+        if r['date'] == param['date'] and r['day'] == param['day'] and r['subject'] == param['subject']:
+            return r
+    return None
+
+
+def add(db_records, param):
+    r = get_record(db_records, param)
+    if not r:
+        db_records.append(param)
+    else:
+        if param['tema']:
+            if r['tema']:
+                r['tema'] = r['tema'] + '; ' + param['tema']
+            else:
+                r['tema'] = param['tema']
+        if param['exercise']:
+            if r['exercise']:
+                r['exercise'] = r['exercise'] + '; ' + param['exercise']
+            else:
+                r['exercise'] = param['exercise']
+
 
 while True:
     try:
@@ -201,6 +232,13 @@ while True:
                     _hometask_goingon = False
                     continue
 
+                if is_first_column(d):
+                    _hometask = ""
+                    _tema = ""
+                    _hometask_goingon = False
+                    _tema_goingon = False
+                    continue
+
                 if is_title(d):
                     _subj = extract(d[2])
                     _hometask = ""
@@ -220,21 +258,26 @@ while True:
                 if _subj and (_hometask_goingon or _tema_goingon):
                     if is_score(d) and (_hometask or _tema):
                         _hometask_goingon = False
-                        r = get_record(_date, _day, _subj)
-                        if r:
-                            if is_need_update(r, _date, _day, _subj, _tema, _hometask):
-                                db_records.append(build_update_db_record(r, _date, _day, _subj, _tema, _hometask))
+                        add(db_records, {'date': _date, "day":_day, "subject":_subj, "tema": _tema, "exercise":_hometask})
 
                         _hometask = ""
                         _tema = ""
                     else:
                         _hometask = process_home_task(d, _hometask)
 
+            update_db_records = []
             for i in db_records:
+                r = get_db_record(i['date'], i['day'], i['subject'])
+                if not r:
+                    continue
+                if is_need_update(r, i['tema'], i['exercise']):
+                    update_db_records.append(build_update_db_record(r, i['tema'], i['exercise']))
+
+            for i in update_db_records:
                 print(i)
-            if db_records:
+            if update_db_records:
                 n_arr = []
-                for rec in db_records:
+                for rec in update_db_records:
                     result = dienasgramata.update_one(rec[0], rec[1])
                     if not result.modified_count == 1:
                         print(result, rec)
