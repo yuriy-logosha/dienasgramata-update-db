@@ -44,7 +44,15 @@ logging.basicConfig(format=config["logging.format"], handlers=[c_handler, f_hand
 logger = logging.getLogger(config["logging.name"])
 logger.setLevel(logging_level)
 
-producer = KafkaProducer(bootstrap_servers=[config['kafka.host']], value_serializer = lambda x: json.dumps(x, cls = JSONEncoder).encode('utf-8'))
+
+def get_producer():
+    global producer
+    if producer and producer.bootstrap_connected():
+        return producer
+
+    producer = KafkaProducer(bootstrap_servers=[config['kafka.host']], value_serializer = lambda x: json.dumps(x, cls = JSONEncoder).encode('utf-8'))
+    return producer
+
 
 def request_site():
     d = []
@@ -171,9 +179,11 @@ def is_need_update(_record, _tema, _hometask):
     return False
 
 
-def notify(items):
-    if producer:
-        producer.send(config['kafka.topic'], value = {config["kafka.message.tag"]: items})
+def notify(result):
+    try:
+        get_producer().send(config['kafka.topic'], value = {config["kafka.message.tag"]: result.inserted_ids})
+    except Exception as e:
+        logger.error(e)
 
 
 def get_record(db_records, param):
