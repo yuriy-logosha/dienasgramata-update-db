@@ -45,6 +45,9 @@ logger = logging.getLogger(config["logging.name"])
 logger.setLevel(logging_level)
 
 
+producer = None
+
+
 def get_producer():
     global producer
     if producer and producer.bootstrap_connected():
