@@ -184,7 +184,7 @@ def is_need_update(_record, _tema, _hometask):
 
 def notify(items):
     try:
-        get_producer().send(config['kafka.topic'], value = {config["kafka.message.tag"]: result.items})
+        get_producer().send(config['kafka.topic'], value = {config["kafka.message.tag"]: items})
     except Exception as e:
         logger.error(e)
 
