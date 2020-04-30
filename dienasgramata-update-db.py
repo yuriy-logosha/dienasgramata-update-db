@@ -185,7 +185,6 @@ def is_need_update(_record, _tema, _hometask):
 def notify(items):
     try:
         get_producer().send(config['kafka.topic'], value = {config["kafka.message.tag"]: items})
-        logger.info("Notified with", items)
     except Exception as e:
         logger.error(e)
 
@@ -296,7 +295,7 @@ while True:
                     if not result.modified_count == 1:
                         print(result, rec)
                     else:
-                        n_arr.append(rec[0]['_id'])
+                        n_arr.append(rec[0].get('_id'))
                 notify(n_arr)
 
 
