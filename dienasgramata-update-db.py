@@ -61,7 +61,7 @@ def request_site():
     d = []
     try:
         for url in config["sites"]:
-            parser_config = {'valid_tags': ['tr', 'td', 'a', 'b', 'span', 'div', 'h2']}
+            parser_config = {'valid_tags': ['tr', 'td', 'a', 'b', 'span', 'div', 'h2', 'p']}
             d += MyHTMLParser(parser_config).feed_and_return(_get(url).content.decode()).data
     except RuntimeError as e:
         logger.debug(e)
